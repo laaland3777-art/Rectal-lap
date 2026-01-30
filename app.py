@@ -8,7 +8,6 @@ import joblib
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Laparoscopic Surgery Difficulty Prediction",
-    page_icon="🏥",
     layout="centered"
 )
 
@@ -33,7 +32,7 @@ model, scaler, model_columns = load_artifacts()
 # ---------------------------------------------------------
 # 3. Title and Introduction
 # ---------------------------------------------------------
-st.title("🏥 Laparoscopic Surgery Difficulty Prediction Model")
+st.title("Laparoscopic Surgery Difficulty Prediction Model")
 st.markdown("""
 This application predicts the difficulty probability of **laparoscopic rectal surgery** based on preoperative clinical features and pelvic measurements.
 Please input the patient's parameters below.
@@ -163,3 +162,4 @@ if st.button("Predict Difficulty", type="primary", use_container_width=True):
 # --- Footer ---
 st.markdown("---")
 st.caption("Model based on Ensemble Learning (GaussianNB + SVM + XGBoost).")
+
