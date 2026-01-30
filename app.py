@@ -4,160 +4,159 @@ import numpy as np
 import joblib
 
 # ---------------------------------------------------------
-# 1. Page Configuration
+# 1. 页面配置 (Page Configuration) - 采用附件的居中布局
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Laparoscopic Surgery Difficulty Prediction",
     page_icon="🏥",
-    layout="wide"
+    layout="centered"
 )
 
-# Title and Introduction
-st.title("🏥 Laparoscopic Surgery Difficulty Prediction Model")
-st.markdown("""
-**Introduction**:  
-This system is designed to predict the difficulty of laparoscopic rectal surgery.
-Please input the patient's pelvic measurements and clinical characteristics in the sidebar to assess the surgical difficulty risk.
-""")
-
-st.divider() 
-
 # ---------------------------------------------------------
-# 2. Load Model and Artifacts
+# 2. 加载模型和工具 (Load Model and Artifacts)
 # ---------------------------------------------------------
 @st.cache_resource
 def load_artifacts():
-    # Ensure these three files are in the same directory
-    model = joblib.load("final_ensemble_model.pkl")
-    scaler = joblib.load("final_scaler.pkl")
-    # Note: This is essential for column alignment
-    model_columns = joblib.load("final_columns.pkl") 
-    return model, scaler, model_columns
+    try:
+        # 请确保这三个文件在 GitHub 或本地文件夹中
+        model = joblib.load("final_ensemble_model.pkl")
+        scaler = joblib.load("final_scaler.pkl")
+        model_columns = joblib.load("final_columns.pkl") # 关键文件：用于列对齐
+        return model, scaler, model_columns
+    except FileNotFoundError as e:
+        st.error(f"Error: Necessary files not found. Details: {e}")
+        st.warning("Please ensure 'final_ensemble_model.pkl', 'final_scaler.pkl', and 'final_columns.pkl' are in the same directory.")
+        return None, None, None
 
-try:
-    model, scaler, model_columns = load_artifacts()
-except FileNotFoundError as e:
-    st.error(f"❌ System startup failed: Necessary files not found. Error details: {e}")
-    st.warning("Please ensure 'final_ensemble_model.pkl', 'final_scaler.pkl', and 'final_columns.pkl' are in the current directory.")
-    st.stop()
+model, scaler, model_columns = load_artifacts()
 
 # ---------------------------------------------------------
-# 3. Sidebar: Patient Features Input
+# 3. 标题和介绍 (Title and Introduction)
 # ---------------------------------------------------------
-st.sidebar.header("📋 Clinical Parameters")
+st.title("🏥 Laparoscopic Surgery Difficulty Prediction Model")
+st.markdown("""
+This application predicts the difficulty probability of laparoscopic rectal surgery based on preoperative clinical features and pelvic measurements.
+Please input the patient's parameters below.
+""")
 
-def user_input_features():
-    # --- 1. History of abdominal surgery (0/1 variable) ---
-    # UI displays No/Yes, logic converts to 0/1
-    history_display = st.sidebar.radio(
+st.markdown("---")
+
+# ---------------------------------------------------------
+# 4. 输入表单 (Patient Features Input) - 双列布局
+# ---------------------------------------------------------
+st.subheader("Patient Features Input")
+
+# 创建两列布局
+col1, col2 = st.columns(2)
+
+with col1:
+    # 1. History of abdominal surgery (0/1)
+    history_display = st.radio(
         "History of abdominal surgery",
         options=["No", "Yes"],
         index=0,
-        horizontal=True
+        horizontal=True,
+        help="Does the patient have a history of previous abdominal surgeries?"
     )
-    history_value = 1 if history_display == "Yes" else 0
-
-    st.sidebar.markdown("---") 
-    st.sidebar.subheader("📏 Pelvic Measurements")
-
-    # --- 2. Numerical Variables (with units) ---
-    # Ranges (min, max) and default values are estimates; adjust based on actual data distribution
+    # 转换逻辑：Yes -> 1, No -> 0
+    f_history = 1 if history_display == "Yes" else 0
     
-    dist_anal = st.sidebar.number_input(
-        "Distance from anal verge",
+    # 2. Distance from anal verge
+    f_dist_anal = st.number_input(
+        "Distance from anal verge (cm)", 
         min_value=0.0, max_value=20.0, value=5.0, step=0.5,
-        format="%.1f", help="Unit: cm"
+        format="%.1f",
+        help="Distance from the anal verge to the tumor."
     )
     
-    inter_dist = st.sidebar.number_input(
-        "Intertuberous distance",
+    # 3. Intertuberous distance
+    f_inter_dist = st.number_input(
+        "Intertuberous distance (cm)", 
         min_value=5.0, max_value=20.0, value=10.0, step=0.1,
-        format="%.1f", help="Unit: cm"
+        format="%.1f",
+        help="Distance between the ischial tuberosities."
     )
-    
-    ap_diameter = st.sidebar.number_input(
-        "Anteroposterior diameter of the pelvic inlet",
+
+with col2:
+    # 4. Anteroposterior diameter of the pelvic inlet
+    f_ap_diameter = st.number_input(
+        "AP diameter of pelvic inlet (cm)", 
         min_value=5.0, max_value=20.0, value=11.0, step=0.1,
-        format="%.1f", help="Unit: cm"
+        format="%.1f",
+        help="Anteroposterior diameter of the pelvic inlet."
     )
     
-    sacro_dist = st.sidebar.number_input(
-        "Sacrococcygeal distance",
+    # 5. Sacrococcygeal distance
+    f_sacro_dist = st.number_input(
+        "Sacrococcygeal distance (cm)", 
         min_value=5.0, max_value=20.0, value=10.0, step=0.1,
-        format="%.1f", help="Unit: cm"
+        format="%.1f",
+        help="Distance between the sacrum and coccyx."
     )
     
-    fat_area = st.sidebar.number_input(
-        "Mesorectal fat area",
+    # 6. Mesorectal fat area
+    f_fat_area = st.number_input(
+        "Mesorectal fat area (cm²)", 
         min_value=0.0, max_value=100.0, value=20.0, step=0.1,
-        format="%.1f", help="Unit: cm²"
+        format="%.1f",
+        help="Cross-sectional area of the mesorectal fat."
     )
 
-    # --- Construct DataFrame ---
-    # Keys must match the column names in your training CSV exactly!
-    data = {
-        'History of abdominal surgery': history_value,
-        'Distance from anal verge': dist_anal,
-        'Intertuberous distance': inter_dist,
-        'Anteroposterior diameter of the pelvic inlet': ap_diameter,
-        'Sacrococcygeal distance': sacro_dist,
-        'Mesorectal fat area': fat_area
-    }
-    return pd.DataFrame(data, index=[0])
-
-# Get user input
-input_df = user_input_features()
-
 # ---------------------------------------------------------
-# 4. Main Interface: Display and Prediction
+# 5. 预测逻辑 (Prediction Logic)
 # ---------------------------------------------------------
+if st.button("Predict Difficulty", type="primary", use_container_width=True):
+    if model is not None and scaler is not None:
+        
+        # --- A. 构造输入 DataFrame ---
+        # 这里的 Key 必须与您训练数据 CSV 中的列名完全一致！
+        input_data = pd.DataFrame([{
+            'History of abdominal surgery': f_history,
+            'Distance from anal verge': f_dist_anal,
+            'Intertuberous distance': f_inter_dist,
+            'Anteroposterior diameter of the pelvic inlet': f_ap_diameter,
+            'Sacrococcygeal distance': f_sacro_dist,
+            'Mesorectal fat area': f_fat_area
+        }])
+        
+        # --- B. 数据预处理 (关键步骤) ---
+        # 1. 独热编码 (保持流程一致)
+        input_df_encoded = pd.get_dummies(input_data)
+        
+        # 2. 列对齐 (Critical Step: 确保列顺序和数量与训练模型时完全一致)
+        input_df_encoded = input_df_encoded.reindex(columns=model_columns, fill_value=0)
+        
+        # 3. 标准化
+        input_scaled = scaler.transform(input_df_encoded)
+        input_scaled_df = pd.DataFrame(input_scaled, columns=model_columns)
+        
+        # --- C. 模型预测 ---
+        # 获取属于类别 1 (High Difficulty) 的概率
+        probability = model.predict_proba(input_scaled_df)[0][1]
+        prediction_class = 1 if probability >= 0.5 else 0
+        
+        # ---------------------------------------------------------
+        # 6. 结果展示 (Result Display) - 仿照附件风格
+        # ---------------------------------------------------------
+        st.markdown("---")
+        st.subheader("Prediction Result")
+        
+        # 进度条显示风险概率
+        st.progress(probability)
+        
+        result_col1, result_col2 = st.columns(2)
+        
+        with result_col1:
+            st.metric(label="Difficulty Probability", value=f"{probability:.1%}")
+            
+        with result_col2:
+            if prediction_class == 1:
+                st.error("⚠️ High Difficulty Predicted")
+            else:
+                st.success("✅ Low Difficulty Predicted")
+                
+        st.info(f"The model predicts a **{probability:.1%}** chance of the surgery being difficult based on the provided parameters.")
 
-# Display overview of input data
-with st.expander("Review Input Patient Data", expanded=True):
-    st.dataframe(input_df)
-
-# Prediction Button
-if st.button("🚀 Predict Difficulty", type="primary", use_container_width=True):
-    
-    # --- Data Preprocessing ---
-    # 1. One-Hot Encoding (Maintains consistency with training flow)
-    input_df_encoded = pd.get_dummies(input_df)
-    
-    # 2. Column Alignment (Critical: Ensures column order/count matches training model)
-    input_df_encoded = input_df_encoded.reindex(columns=model_columns, fill_value=0)
-    
-    # 3. Standardization (Use the pre-trained scaler)
-    input_scaled = scaler.transform(input_df_encoded)
-    input_scaled_df = pd.DataFrame(input_scaled, columns=model_columns)
-
-    # --- Model Inference ---
-    prediction = model.predict(input_scaled_df)
-    prediction_proba = model.predict_proba(input_scaled_df)
-    
-    # Get probability for Class 1 (High Difficulty)
-    prob_high = prediction_proba[0][1]
-
-    # --- Result Display ---
-    st.subheader("📊 Prediction Results")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        # Gauge-style metric
-        st.metric(
-            label="Probability of High Difficulty", 
-            value=f"{prob_high * 100:.1f}%",
-            delta="Risk Score"
-        )
-    
-    with col2:
-        if prediction[0] == 1:
-            st.error("⚠️ **High Difficulty**")
-            st.write("The model predicts high surgical difficulty. Adequate preoperative preparation is recommended.")
-        else:
-            st.success("✅ **Low Difficulty**")
-            st.write("The model predicts relatively low surgical difficulty.")
-
-    # Visualize probability bar
-    st.write("Risk Probability Bar:")
-    st.progress(int(prob_high * 100))
+# --- 页脚 ---
+st.markdown("---")
+st.caption("Model based on Ensemble Learning (GaussianNB + SVM + XGBoost).")
